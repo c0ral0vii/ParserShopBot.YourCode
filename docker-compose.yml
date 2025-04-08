@@ -3,6 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    container_name: bot
     volumes:
       - .:/app
     env_file:
@@ -10,7 +11,8 @@ services:
     restart: always
     
   db:
-    image: postgres:16
+    image: postgres:latest
+    container_name: postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -23,4 +25,4 @@ services:
 
 volumes:
   postgres_data:
-  redis_data:
+  # redis_data:
