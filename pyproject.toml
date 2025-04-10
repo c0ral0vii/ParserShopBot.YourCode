@@ -7,6 +7,8 @@ requires-python = ">=3.13"
 dependencies = [
     "alembic>=1.15.2",
     "asyncpg>=0.30.0",
+    "currencyconverter>=0.18.5",
+    "forex-python>=1.8",
     "playwright>=1.51.0",
     "psycopg>=3.2.6",
     "python-dotenv>=1.1.0",

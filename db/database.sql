@@ -15,10 +15,13 @@ create table fee (
 
 create table orders (
     id serial primary key,
-    link varchar(2048) not null,
+    link varchar(10000) not null,
+    user_id bigint not null,
     price float not null,
     fee int not null,
+    size varchar(3) null,
     ready boolean default false,
+
     created_at timestamp default now(),
     updated_at timestamp default now()
 );

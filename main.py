@@ -41,21 +41,31 @@ async def item_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         
         message = await update.message.reply_text("Обрабатываю ссылку...")
-        # Получаем цену через BrowserService
         
         async with BrowserService() as browser:
             data = await browser.find_item(message_text)
         
         if data:
             await message.delete()
-            await update.message.reply_text(
-                f"Название товара: {data['title']}\n"
-                f"Цена товара: {data['price']}\n\n"
-                "Для заказа товара нажмите кнопку снизу!",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("Заказать", callback_data=f"order")]
-                ])
-            )
+            
+            image_url = data.get("title_img")
+            model = Converter()
+            if image_url:
+                await update.message.reply_media_group(
+                    media="",
+                    caption=f"Название товара: {data['title']}\n"
+                    f"Цена товара: {data['price']}\n\n"
+                    "Для заказа товара нажмите кнопку снизу!",
+                )
+            else:
+                await update.message.reply_text(
+                    f"Название товара: {data['title']}\n"
+                    f"Цена товара: {data['price']}\n\n"
+                    "Для заказа товара нажмите кнопку снизу!",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("Заказать", callback_data=f"order")]
+                    ])
+                )
         else:
             await update.message.reply_text("Не удалось получить цену товара. Проверьте ссылку и попробуйте снова.")
             
@@ -65,7 +75,7 @@ async def item_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 if __name__ == '__main__':
-    application = Application.builder().token(token="7464611060:AAHW2Xs74KfS7D8WmecwaRAQ-Dyy6JK_J5E").build()
+    application = Application.builder().token(token=bot_token).build()
     
     # Добавляем обработчики
     application.add_handler(CommandHandler("start", start))

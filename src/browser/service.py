@@ -15,7 +15,7 @@ class BrowserService:
             async with async_playwright() as p:
                 # Запускаем браузер
                 self.browser = await p.firefox.launch(
-                    headless=False,
+                    headless=True,
                 )
                 
                 # Создаем новый контекст
@@ -30,33 +30,50 @@ class BrowserService:
                 self.page = await self.context.new_page()
                 await self.page.goto(url, timeout=60000)
                 
-                await asyncio.sleep(15)
+                await self.page.wait_for_selector("h1.Ty")
                 
                 title_element = await self.page.query_selector("h1.Ty")
-                title = await title_element.text_content() if title_element else None
                 price_elements = await self.page.query_selector_all("div.TC")
+                img_element = await self.page.query_selector("img.ql")
+                
+                size_elements = await self.page.query_selector_all("div.Vu")
+                price_elements = await self.page.query_selector_all("div.Vv")
+                
+                sizes_prices = []
+                for size_el, price_el in zip(size_elements, price_elements):
+                    size = await size_el.text_content()
+                    price = await price_el.text_content()
+                    if size and price:
+                        sizes_prices.append({
+                            "size": size.strip(),
+                            "price": price.strip()
+                        })
+                
+                valid_sizes_prices = [
+                    item for item in sizes_prices 
+                    if item["price"] and not item["price"].startswith("$--")
+                ]
                 
                 prices = []
                 for element in price_elements:
                     price_text = await element.text_content()
                     if price_text:
                         prices.append(price_text.strip())
-                img_element = await self.page.query_selector("img.ql")
                 
                 data = {
-                    "title_img": await img_element.text_content() if img_element else None,
-                    "title": title,
-                    "prices": prices[0],
+                    "title_img": await img_element.get_attribute('src') if img_element else None,
+                    "title": await title_element.text_content() if title_element else None,
+                    "sizes": valid_sizes_prices,
+                    "prices": prices,
+                    "currency": prices[0][0] if prices else None,
                     "standart_price": prices[0] if prices else None
                 }
                 
-                return data         
+                return data
                        
         except Exception as e:
             print(f"Ошибка при получении цены: {e}")
             return None
-        finally:
-            await self.close()
     
     def _generate_user_agent(self) -> str:
         """Генерация случайного User-Agent"""
