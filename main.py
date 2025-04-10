@@ -1,6 +1,6 @@
 import logging
 import asyncio
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from src.browser.service import BrowserService
 from db.orm import create_user, create_order, get_latest_fee
@@ -39,35 +39,33 @@ async def item_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not message_text.startswith(('http://', 'https://')):
             await update.message.reply_text("Пожалуйста, отправьте корректную ссылку на товар.")
             return
-
-        # Получаем цену через BrowserService
-        async with BrowserService() as browser:
-            price = await browser.find_price(message_text)
         
-        if price:
-            # Получаем текущую комиссию
-            fee = await get_latest_fee()
-            fee_amount = fee['fee'] if fee else 0
-            
-            # Создаем заказ
-            await create_order(message_text, float(price), fee_amount)
-            
-            # Отправляем ответ пользователю
+        message = await update.message.reply_text("Обрабатываю ссылку...")
+        # Получаем цену через BrowserService
+        
+        async with BrowserService() as browser:
+            data = await browser.find_item(message_text)
+        
+        if data:
+            await message.delete()
             await update.message.reply_text(
-                f"Цена товара: {price}\n"
-                f"Комиссия: {fee_amount}%\n"
-                f"Итоговая цена: {float(price) * (1 + fee_amount/100)}",
+                f"Название товара: {data['title']}\n"
+                f"Цена товара: {data['price']}\n\n"
+                "Для заказа товара нажмите кнопку снизу!",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("Заказать", callback_data=f"order")]
+                ])
             )
         else:
             await update.message.reply_text("Не удалось получить цену товара. Проверьте ссылку и попробуйте снова.")
             
     except Exception as e:
         logging.error(f"Ошибка при обработке ссылки: {e}")
-        await update.message.reply_text("Произошла ошибка при обработке ссылки. Попробуйте позже.")
+        await update.message.reply_text("Произошла ошибка при обработке ссылки. Попробуйте еще раз.")
 
 
 if __name__ == '__main__':
-    application = Application.builder().token(token="7464611060:AAE8zcGY-h9vv6AoJeVprVth1wbmGwDs0O8").build()
+    application = Application.builder().token(token="7464611060:AAHW2Xs74KfS7D8WmecwaRAQ-Dyy6JK_J5E").build()
     
     # Добавляем обработчики
     application.add_handler(CommandHandler("start", start))
