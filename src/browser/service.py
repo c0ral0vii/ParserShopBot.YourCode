@@ -59,14 +59,14 @@ class BrowserService:
                     price_text = await element.text_content()
                     if price_text:
                         prices.append(price_text.strip())
-                
+                image = await img_element.get_attribute('src') if img_element else None
                 data = {
-                    "title_img": await img_element.get_attribute('src') if img_element else None,
+                    "title_img": image.split("?")[0] if image else None,
                     "title": await title_element.text_content() if title_element else None,
                     "sizes": valid_sizes_prices,
                     "prices": prices,
                     "currency": prices[0][0] if prices else None,
-                    "standart_price": prices[0] if prices else None
+                    "standart_price": prices[0][1:] if prices else None
                 }
                 
                 return data

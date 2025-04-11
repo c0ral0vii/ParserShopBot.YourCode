@@ -1,86 +1,120 @@
 import logging
 import asyncio
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from aiogram import Bot, Dispatcher, F, types
+from aiogram.filters import Command, CommandStart
 from src.browser.service import BrowserService
 from db.orm import create_user, create_order, get_latest_fee
 from db.database import db
 from config import bot_token
+from src.converter.service import Converter
 
-# Настройка логирования
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
+bot = Bot(token=bot_token)
+dp = Dispatcher()
 
-async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+@dp.message(Command("/admin"))
+async def admin(message: types.Message,):
     """Запуск админ панели"""
-    user_id = update.effective_user.id
+    
+    user_id = message.from_user.id
     # Здесь можно добавить проверку на админа
-    await update.message.reply_text("Админ панель")
+    await message.answer("Админ панель")
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+@dp.message(CommandStart())
+async def start(message: types.Message,):
     """Старт бота"""
-    user_id = update.effective_user.id
-    username = update.effective_user.username
+    user_id = message.from_user.id
+
+    username = message.from_user.username
     
     await create_user(user_id, username if username else "-")
-    await update.message.reply_text(
+    await message.answer(
         "Привет! Отправь мне ссылку на товар, и я покажу его цену и возможность заказа."
     )
 
-async def item_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+@dp.message(F.text)
+async def item_message(message: types.Message,):
     """Обработка сообщений с ссылками"""
-    user_id = update.effective_user.id
-    message_text = update.message.text
+    user_id = message.from_user.id
+    message_text = message.text
     
     try:
         # Проверяем, что сообщение содержит ссылку
         if not message_text.startswith(('http://', 'https://')):
-            await update.message.reply_text("Пожалуйста, отправьте корректную ссылку на товар.")
+            await message.answer("Пожалуйста, отправьте корректную ссылку на товар.")
             return
         
-        message = await update.message.reply_text("Обрабатываю ссылку...")
+        answer_message = await message.answer("Обрабатываю ссылку...")
         
-        async with BrowserService() as browser:
-            data = await browser.find_item(message_text)
+        browser = BrowserService()
+        data = await browser.find_item(message_text)
         
         if data:
-            await message.delete()
-            
-            image_url = data.get("title_img")
             model = Converter()
-            if image_url:
-                await update.message.reply_media_group(
-                    media="",
-                    caption=f"Название товара: {data['title']}\n"
-                    f"Цена товара: {data['price']}\n\n"
-                    "Для заказа товара нажмите кнопку снизу!",
+            
+            standart_price_rub = await model.convert_sum(sum=int(data["standart_price"]), currency=data["currency"])
+
+        
+            # Формируем текст с размерами и ценами
+            # sizes_text = "\n".join(
+            #     f"{item['size']}: {item['price']} ({await model.convert_sum(item['price'], data['currency'])})"
+            #     for item in data.get("sizes", [])
+            # )
+            
+            caption = (
+                f"🏷 <b>{data['title']}</b>\n\n"
+                f"💰 Цена: {data['standart_price']}{data["currency"]} ({standart_price_rub})\n\n"
+                "🛒 Для заказа нажмите кнопку ниже"
+            )
+            print(data)
+            
+            kb = types.InlineKeyboardMarkup(inline_keyboard=[
+                [types.InlineKeyboardButton(text="Заказать", callback_data=f"order_{data.get('product_id', '')}")]
+            ])
+            
+            if data.get("title_img"):
+                await bot.send_photo(
+                    chat_id=user_id,
+                    photo=data["title_img"],
+                    caption=caption,
+                    reply_markup=kb,
+                    parse_mode="HTML"
                 )
             else:
-                await update.message.reply_text(
-                    f"Название товара: {data['title']}\n"
-                    f"Цена товара: {data['price']}\n\n"
-                    "Для заказа товара нажмите кнопку снизу!",
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("Заказать", callback_data=f"order")]
-                    ])
+                await message.answer(
+                    text=caption,
+                    reply_markup=kb,
+                    parse_mode="HTML"
                 )
+            
+            await answer_message.delete()
         else:
-            await update.message.reply_text("Не удалось получить цену товара. Проверьте ссылку и попробуйте снова.")
+            await message.answer("Не удалось получить цену товара. Проверьте ссылку и попробуйте снова.")
             
     except Exception as e:
         logging.error(f"Ошибка при обработке ссылки: {e}")
-        await update.message.reply_text("Произошла ошибка при обработке ссылки. Попробуйте еще раз.")
+        await message.answer("Произошла ошибка при обработке ссылки. Попробуйте еще раз.")
+
+async def on_startup():
+
+    commands = [
+        types.BotCommand(command="/start", description="Перезапуск бота (Restart bot)"),
+    ]
+
+    await bot.set_my_commands(commands)
 
 
+async def run():
+    await bot.delete_webhook(drop_pending_updates=True)
+    await on_startup()
+
+    await dp.start_polling(bot)
+    
 if __name__ == '__main__':
-    application = Application.builder().token(token=bot_token).build()
-    
+    logging.basicConfig(
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        level=logging.INFO
+    )
+    asyncio.run(run())
     # Добавляем обработчики
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("admin", admin))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, item_message))
     
-    # Запускаем бота
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
